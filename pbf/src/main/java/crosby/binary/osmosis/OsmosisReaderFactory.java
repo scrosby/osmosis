@@ -4,6 +4,8 @@ package crosby.binary.osmosis;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
+import java.io.FilterInputStream;
+import java.io.InputStream;
 
 import org.openstreetmap.osmosis.core.pipeline.common.TaskConfiguration;
 import org.openstreetmap.osmosis.core.pipeline.common.TaskManager;
@@ -24,26 +26,36 @@ public class OsmosisReaderFactory extends TaskManagerFactory {
     @Override
     protected TaskManager createTaskManagerImpl(TaskConfiguration taskConfig) {
         String fileName;
-        File file;
         OsmosisReader task;
 
         // Get the task arguments.
         fileName = getStringArgument(taskConfig, ARG_FILE_NAME,
                 getDefaultStringArgument(taskConfig, DEFAULT_FILE_NAME));
 
-        // Create a file object from the file name provided.
-        file = new File(fileName);
-
         // Build the task object.
-        try {
-            task = new OsmosisReader(new FileInputStream(file));
-        } catch (FileNotFoundException e) {
-            // TODO Auto-generated catch block
-            e.printStackTrace();
-            return null;
+        if (fileName.equals("-")) {
+            task = new OsmosisReader(System.in);
+        } else {
+            File file = new File(fileName);
+            try {
+                FileInputStream fileStream = new FileInputStream(file);
+                // BlockOutputStream assumes FileInputStreams are seekable, but this isn't true with named pipes.
+                // So wrap it.
+                task = new OsmosisReader(new NoopInputStream(fileStream));
+            } catch (FileNotFoundException e) {
+                // TODO Auto-generated catch block
+                e.printStackTrace();
+                return null;
+            }
         }
-
         return new RunnableSourceManager(taskConfig.getId(), task, taskConfig
                 .getPipeArgs());
+    }
+
+    /** Basic wrapper around an InputStream */
+    class NoopInputStream extends FilterInputStream {
+        NoopInputStream(InputStream i) {
+            super(i);
+        }
     }
 }
